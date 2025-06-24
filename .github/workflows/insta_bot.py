@@ -1,82 +1,43 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+from playwright.sync_api import sync_playwright
 import time
 
-USERNAME = 'selenium.bot.demo1'  # Use a dummy account
-PASSWORD = 'Selenium@12345'
-TARGET_USER = 'cbitosc'
+USERNAME = "selenium.bot.demo1"
+PASSWORD = "Selenium@12345"
+TARGET_USER = "cbitosc"
 
-# Setup Chrome options
-options = webdriver.ChromeOptions()
-options.add_argument("--start-maximized")
-
-# Initialize driver
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
-def login():
-    driver.get("https://www.instagram.com/accounts/login/")
-    time.sleep(5)
-
-    user_input = driver.find_element(By.NAME, "username")
-    pass_input = driver.find_element(By.NAME, "password")
-
-    user_input.send_keys(USERNAME)
-    pass_input.send_keys(PASSWORD)
-    pass_input.send_keys(Keys.ENTER)
-    time.sleep(8)
-
-    # Dismiss "Save Info" popup
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page()
+    page.goto("https://www.instagram.com/accounts/login/")
+    page.wait_for_timeout(5000)
+    page.fill("input[name='username']", USERNAME)
+    page.fill("input[name='password']", PASSWORD)
+    page.press("input[name='password']", "Enter")
+    page.wait_for_timeout(8000)
     try:
-        not_now = driver.find_element(By.XPATH, "//button[contains(text(), 'Not Now')]")
-        not_now.click()
-        time.sleep(3)
+        page.click("text=Not Now")
+        page.wait_for_timeout(2000)
     except:
         pass
-
-def search_and_follow():
-    driver.get(f"https://www.instagram.com/{TARGET_USER}/")
-    time.sleep(6)
-
+    page.goto(f"https://www.instagram.com/{TARGET_USER}/")
+    page.wait_for_timeout(5000)
     try:
-        follow_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Follow')]")
-        follow_button.click()
-        print("Followed the user.")
-        time.sleep(3)
+        btn = page.locator("button", has_text="Follow")
+        if btn.count():
+            btn.first.click()
+            print("✅ Followed")
+            time.sleep(2)
     except:
-        print("Already following or button not found.")
-
-def extract_data():
-    time.sleep(3)
-    
-    # Bio text is inside the header section
+        print("⚠️ Already following/not found")
+    stats = page.locator("header ul li")
+    posts = stats.nth(0).text_content().split()[0] if stats.count() > 0 else "N/A"
+    followers = stats.nth(1).text_content().split()[0] if stats.count() > 1 else "N/A"
+    following = stats.nth(2).text_content().split()[0] if stats.count() > 2 else "N/A"
     try:
-        bio = driver.find_element(By.XPATH, "//div[@class='_aa_c']//div[@class='_aacl _aaco _aacw _aacx _aad7 _aade']").text
+        bio = page.locator("header section div:nth-child(2)").text_content()
     except:
         bio = "Bio not found"
-
-    # Stats: posts, followers, following
-    try:
-        stats = driver.find_elements(By.XPATH, "//ul[@class='_aa_7']/li/div/span")
-        posts = stats[0].text
-        followers = stats[1].get_attribute("title") or stats[1].text
-        following = stats[2].text
-    except:
-        posts, followers, following = "N/A", "N/A", "N/A"
-
     with open("profile_info.txt", "w", encoding="utf-8") as f:
-        f.write(f"Username: {TARGET_USER}\n")
-        f.write(f"Bio: {bio}\n")
-        f.write(f"Posts: {posts}\n")
-        f.write(f"Followers: {followers}\n")
-        f.write(f"Following: {following}\n")
-
-    print("Profile data saved to profile_info.txt")
-
-if __name__ == "__main__":
-    login()
-    search_and_follow()
-    extract_data()
-    driver.quit()
+        f.write(f"Username: {TARGET_USER}\nBio: {bio}\nPosts: {posts}\nFollowers: {followers}\nFollowing: {following}\n")
+    print("✅ Saved profile_info.txt")
+    browser.close()
